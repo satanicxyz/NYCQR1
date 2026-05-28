@@ -1,6 +1,22 @@
+// Middleware to restrict debug endpoints to development or require DEBUG_SECRET
+function requireDebugAuth(req, res, next) {
+  if (process.env.NODE_ENV === "production") {
+    const debugSecret = process.env.DEBUG_SECRET
+    const providedSecret = req.headers["x-debug-secret"]
+
+    if (!debugSecret || providedSecret !== debugSecret) {
+      return res.status(403).json({
+        status: false,
+        message: "Debug endpoints are disabled in production",
+      })
+    }
+  }
+  next()
+}
+
 module.exports = (app) => {
   // Debug endpoint to view all active transactions
-  app.get("/api/qris/debug/transactions", (req, res) => {
+  app.get("/api/qris/debug/transactions", requireDebugAuth, (req, res) => {
     try {
       const transactions = []
 
@@ -29,17 +45,16 @@ module.exports = (app) => {
         timestamp: new Date().toISOString(),
       })
     } catch (error) {
-      console.error("✗ Error getting debug transactions:", error)
+      console.error("✗ Error getting debug transactions:", error.message)
       res.status(500).json({
         status: false,
         message: "Failed to get transactions",
-        error: error.message,
       })
     }
   })
 
   // Debug endpoint to manually clean up transactions
-  app.post("/api/qris/debug/cleanup", (req, res) => {
+  app.post("/api/qris/debug/cleanup", requireDebugAuth, (req, res) => {
     try {
       let cleanedCount = 0
       const now = new Date()
@@ -50,7 +65,6 @@ module.exports = (app) => {
           if (transaction.status !== "pending" || new Date(transaction.expired) < now) {
             global.transactions.delete(transactionId)
             cleanedCount++
-            console.log("▷ Manual cleanup:", transactionId)
           }
         }
       }
@@ -65,11 +79,10 @@ module.exports = (app) => {
         timestamp: new Date().toISOString(),
       })
     } catch (error) {
-      console.error("✗ Error in manual cleanup:", error)
+      console.error("✗ Error in manual cleanup:", error.message)
       res.status(500).json({
         status: false,
         message: "Failed to cleanup transactions",
-        error: error.message,
       })
     }
   })

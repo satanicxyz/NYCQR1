@@ -170,11 +170,6 @@ module.exports = (app) => {
       res.json({
         status: true,
         message: "Telegram test notification sent successfully",
-        config: {
-          hasToken: true,
-          hasOwnerId: true,
-          ownerId: ownerId,
-        },
       })
     } catch (error) {
       console.log("✗ Telegram test failed:", error)
