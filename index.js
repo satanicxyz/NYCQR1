@@ -4,20 +4,59 @@ const chalk = require("chalk")
 const fs = require("fs")
 const cors = require("cors")
 const path = require("path")
+const rateLimit = require("express-rate-limit")
 
 const app = express()
 const PORT = process.env.PORT || 3000
 
-app.enable("trust proxy")
+// Trust only first proxy (e.g. Vercel, Nginx)
+app.set("trust proxy", 1)
 app.set("json spaces", 2)
 
-// Middleware
-app.use(express.json())
-app.use(express.urlencoded({ extended: false }))
-app.use(cors())
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: false, message: "Too many requests, please try again later." },
+})
 
-// Static file serving
-app.use("/", express.static(path.join(__dirname, "/")))
+const createLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // limit each IP to 10 QRIS creations per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: false, message: "Too many payment requests, please try again later." },
+})
+
+// CORS configuration - restrict to known origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : []
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.) or from allowed origins
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error("Not allowed by CORS"))
+    }
+  },
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}
+
+// Middleware
+app.use(express.json({ limit: "1mb" }))
+app.use(express.urlencoded({ extended: false }))
+app.use(cors(corsOptions))
+app.use("/api/", apiLimiter)
+app.use("/api/qris/create", createLimiter)
+
+// Static file serving - only serve public assets, NOT the root directory
 app.use("/style", express.static(path.join(__dirname, "style")))
 
 // Global variables
